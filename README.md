@@ -6,7 +6,7 @@ Dự án EQmini là một ứng dụng Python được phát triển để [mô 
 
 1. Clone repository:
 ```bash
-git clone [URL repository]
+git clone [https://github.com/CodeBotX/EQmini.git]
 cd EQmini
 ```
 
