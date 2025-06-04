@@ -1,120 +1,70 @@
-#Tạo các bộ lọc 
+from transforms import DiscreteFourierTransform, InverseDiscreteFourierTransform
 
-import numpy as np
 
-class FIRFilter:
-    def __init__(self, sample_rate, filter_order=64):
-        self.sample_rate = sample_rate
-        self.filter_order = filter_order
-        
-    def _create_window(self):
-        """Tạo cửa sổ Hanning cho bộ lọc"""
-        return np.hanning(self.filter_order)
-    
-    def _apply_window(self, h):
-        """Áp dụng cửa sổ cho đáp ứng xung"""
-        return h * self._create_window()
+class LowPassFilter:
+    def __init__(self, cutoff_freq, sample_rate):
+        self.cutoff = cutoff_freq
+        self.fs = sample_rate
 
-class LowPassFilter(FIRFilter):
-    def __init__(self, sample_rate, cutoff_freq, filter_order=64):
-        super().__init__(sample_rate, filter_order)
-        self.cutoff_freq = cutoff_freq
-        
-    def design(self):
-        """Thiết kế bộ lọc thông thấp"""
-        # Tính toán đáp ứng xung lý tưởng
-        n = np.arange(self.filter_order)
-        fc = self.cutoff_freq / (self.sample_rate / 2)  # Chuẩn hóa tần số cắt
-        h = np.sinc(2 * fc * (n - (self.filter_order - 1) / 2))
-        
-        # Áp dụng cửa sổ
-        h = self._apply_window(h)
-        
-        # Chuẩn hóa
-        h = h / np.sum(h)
-        return h
+    def apply(self, signal):
+        N = len(signal)
+        dft = DiscreteFourierTransform(signal)
+        X = dft.transform()
 
-class HighPassFilter(FIRFilter):
-    def __init__(self, sample_rate, cutoff_freq, filter_order=64):
-        super().__init__(sample_rate, filter_order)
-        self.cutoff_freq = cutoff_freq
-        
-    def design(self):
-        """Thiết kế bộ lọc thông cao"""
-        # Tính toán đáp ứng xung lý tưởng
-        n = np.arange(self.filter_order)
-        fc = self.cutoff_freq / (self.sample_rate / 2)  # Chuẩn hóa tần số cắt
-        h = np.sinc(2 * fc * (n - (self.filter_order - 1) / 2))
-        
-        # Chuyển đổi LPF thành HPF
-        h = -h
-        h[(self.filter_order - 1) // 2] += 1
-        
-        # Áp dụng cửa sổ
-        h = self._apply_window(h)
-        
-        # Chuẩn hóa
-        h = h / np.sum(np.abs(h))
-        return h
-
-class BandPassFilter(FIRFilter):
-    def __init__(self, sample_rate, low_cutoff, high_cutoff, filter_order=64):
-        super().__init__(sample_rate, filter_order)
-        self.low_cutoff = low_cutoff
-        self.high_cutoff = high_cutoff
-        
-    def design(self):
-        """Thiết kế bộ lọc thông dải"""
-        # Tính toán đáp ứng xung lý tưởng
-        n = np.arange(self.filter_order)
-        fc1 = self.low_cutoff / (self.sample_rate / 2)  # Chuẩn hóa tần số cắt thấp
-        fc2 = self.high_cutoff / (self.sample_rate / 2)  # Chuẩn hóa tần số cắt cao
-        
-        # Kết hợp hai bộ lọc thông thấp
-        h = np.sinc(2 * fc2 * (n - (self.filter_order - 1) / 2)) - \
-            np.sinc(2 * fc1 * (n - (self.filter_order - 1) / 2))
-        
-        # Áp dụng cửa sổ
-        h = self._apply_window(h)
-        
-        # Chuẩn hóa
-        h = h / np.sum(np.abs(h))
-        return h
-
-class PeakingFilter(FIRFilter):
-    def __init__(self, sample_rate, center_freq, gain_db, bandwidth, filter_order=64):
-        super().__init__(sample_rate, filter_order)
-        self.center_freq = center_freq
-        self.gain_db = gain_db
-        self.bandwidth = bandwidth
-        
-    def design(self):
-        """Thiết kế bộ lọc peaking"""
-        # Tính toán các tham số
-        w0 = 2 * np.pi * self.center_freq / self.sample_rate
-        bw = self.bandwidth / self.sample_rate
-        gain = 10 ** (self.gain_db / 20)
-        
-        # Tính toán đáp ứng xung
-        n = np.arange(self.filter_order)
-        h = np.zeros(self.filter_order)
-        
-        # Thiết kế bộ lọc peaking
-        for i in range(self.filter_order):
-            if i == (self.filter_order - 1) // 2:
-                h[i] = 1 + (gain - 1) * np.exp(-bw * np.pi)
+        # Áp dụng LPF: chỉ giữ các tần số thấp hơn ngưỡng
+        filtered_X = []
+        for k in range(N):
+            freq = k * self.fs / N
+            if freq <= self.cutoff or freq >= (self.fs - self.cutoff):
+                filtered_X.append(X[k])
             else:
-                h[i] = (gain - 1) * np.sin(bw * np.pi * (i - (self.filter_order - 1) / 2)) / \
-                       (np.pi * (i - (self.filter_order - 1) / 2))
-        
-        # Áp dụng cửa sổ
-        h = self._apply_window(h)
-        
-        # Chuẩn hóa
-        h = h / np.sum(np.abs(h))
-        return h
+                filtered_X.append(0j)
 
-    def process(self, x):
-        """Xử lý tín hiệu với bộ lọc peaking"""
-        h = self.design()
-        return np.convolve(x, h, mode='same') 
+        idft = InverseDiscreteFourierTransform(filtered_X)
+        return [x.real for x in idft.transform()]
+
+class HighPassFilter:
+    def __init__(self, cutoff_freq, sample_rate):
+        self.cutoff = cutoff_freq
+        self.fs = sample_rate
+
+    def apply(self, signal):
+        N = len(signal)
+        dft = DiscreteFourierTransform(signal)
+        X = dft.transform()
+
+        # HPF: loại bỏ tần số thấp hơn ngưỡng
+        filtered_X = []
+        for k in range(N):
+            freq = k * self.fs / N
+            if freq >= self.cutoff and freq <= (self.fs - self.cutoff):
+                filtered_X.append(X[k])
+            else:
+                filtered_X.append(0j)
+
+        idft = InverseDiscreteFourierTransform(filtered_X)
+        return [x.real for x in idft.transform()]
+
+class BandPassFilter:
+    def __init__(self, low_cut, high_cut, sample_rate):
+        self.low_cut = low_cut
+        self.high_cut = high_cut
+        self.fs = sample_rate
+
+    def apply(self, signal):
+        N = len(signal)
+        dft = DiscreteFourierTransform(signal)
+        X = dft.transform()
+
+        # BPF: chỉ giữ các tần số nằm giữa low_cut và high_cut
+        filtered_X = []
+        for k in range(N):
+            freq = k * self.fs / N
+            if self.low_cut <= freq <= self.high_cut or \
+               (self.fs - self.high_cut <= freq <= self.fs - self.low_cut):
+                filtered_X.append(X[k])
+            else:
+                filtered_X.append(0j)
+
+        idft = InverseDiscreteFourierTransform(filtered_X)
+        return [x.real for x in idft.transform()]

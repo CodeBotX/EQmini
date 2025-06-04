@@ -1,6 +1,5 @@
 import cmath
 
-import cmath
 
 class DiscreteFourierTransform:
     def __init__(self, xn):
